@@ -42,11 +42,11 @@ cd college-mode
 
 Edit `college_mode.sh` and set your coordinates:
 ```bash
-COLLEGE_LAT=13.00938
-COLLEGE_LON=77.71497
+COLLEGE_LAT=0.000000   # replace with your college latitude
+COLLEGE_LON=0.000000   # replace with your college longitude
 RADIUS_METERS=150
 ```
-Get coordinates by long pressing your college on Google Maps.
+Get coordinates by long pressing your college on Google Maps. Coordinates are intentionally left as placeholders — never commit real coordinates to a public repo.
 
 ### 4. Run
 ```bash
@@ -102,6 +102,16 @@ nohup bash ~/college_mode.sh > ~/college.log 2>&1 &
 5. Outside 150m → full volume + ringer
 6. Checks for headphones before every change — skips if connected
 7. Tracks manual volume changes and reverts after 5 minutes
+
+## Notes
+
+### VPN
+VPN does **not** affect this script. `termux-location` reads GPS hardware directly — VPN only routes internet traffic, not location data. The only edge case is if GPS is unavailable and the script falls back to network-based location (cell tower/WiFi), in which case a VPN *could* confuse it. GPS is always preferred and worked reliably in testing.
+
+### Privacy
+- Coordinates never leave your phone — all processing is local
+- No internet connection required after setup
+- Do not commit your real college coordinates to a public repo — use the placeholders and set them locally
 
 ## Troubleshooting
 
