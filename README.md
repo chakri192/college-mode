@@ -1,6 +1,6 @@
 # college-mode
 
-Automatically switches your Android phone to vibrate + 20% volume when you enter college, and restores full volume when you leave. Built with Termux and pure bash — no paid apps, no root required.
+Automatically switches your Android phone to vibrate + 20% volume when you enter college, and restores full volume when you leave. Built with Termux and pure bash — no root required.
 
 ## Features
 
