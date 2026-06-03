@@ -10,6 +10,7 @@ Automatically switches your Android phone to vibrate + 20% volume when you enter
 | Leave college geofence | Ringer on, media → 100%, notification → max |
 | Headphones connected | Volume unchanged regardless of location |
 | Manual volume change inside college | Reverts back after 5 minutes |
+| Outside active hours (7:30am–5:30pm) | Script sleeps, no changes made |
 | Phone reboot | Script auto-restarts via Termux:Boot |
 
 ---
@@ -120,6 +121,8 @@ All values can be overridden via environment variables without editing the scrip
 | `COLLEGE_MEDIA_PCT` | `20` | Media volume inside college as percentage |
 | `COLLEGE_RINGER` | `0` | Ringer volume inside college |
 | `NORMAL_RINGER` | `7` | Ringer volume outside college |
+| `ACTIVE_START` | `0730` | Script active from this time (24hr format, HHMM) |
+| `ACTIVE_END` | `1730` | Script active until this time (24hr format, HHMM) |
 
 Example — run with custom radius and faster revert for testing:
 
@@ -205,13 +208,14 @@ source ~/.bashrc
 ## How It Works
 
 1. Runs as a background daemon inside Termux
-2. Every 60 seconds fetches your GPS coordinates via `termux-location` (network fallback if GPS unavailable)
-3. Calculates distance to college using the **Haversine formula**
-4. Within radius → applies college profile (vibrate + 20% media volume)
-5. Outside radius → applies normal profile (full volume + ringer)
-6. Before every volume change, checks for wired or Bluetooth headphones — skips if connected
-7. Tracks manual volume changes inside college and reverts after 5 minutes
-8. Logs every action with timestamps to `~/college.log`
+2. Outside active hours (7:30am–5:30pm) the script sleeps and makes no changes
+3. Every 60 seconds fetches your GPS coordinates via `termux-location` (network fallback if GPS unavailable)
+4. Calculates distance to college using the **Haversine formula**
+5. Within radius → applies college profile (vibrate + 20% media volume)
+6. Outside radius → applies normal profile (full volume + ringer)
+7. Before every volume change, checks for wired or Bluetooth headphones — skips if connected
+8. Tracks manual volume changes inside college and reverts after 5 minutes
+9. Logs every action with timestamps to `~/college.log`
 
 ---
 
@@ -239,11 +243,13 @@ To reduce battery impact, increase `CHECK_INTERVAL` to 120 or 180 seconds.
 | Geofence triggers too early | Increase `RADIUS_METERS` to 200–300 |
 | Geofence triggers too late | Decrease `RADIUS_METERS` to 100 |
 | VPN interference | GPS mode unaffected by VPN; network fallback may be affected |
+| Nothing happens at college | Check time — script only runs 7:30am–5:30pm |
 
 ---
 
 ## Notes
 
+- **Active hours**: Script only runs between 7:30am and 5:30pm. Outside those hours it sleeps and makes no volume changes, saving battery. Edit `HOUR -lt "0730"` and `HOUR -gt "1730"` in the script to change the window.
 - **VPN**: GPS hardware is unaffected by VPN. Only the network location fallback could theoretically be affected, but in practice Android's location service is local and bypasses the VPN tunnel.
 - **Pixel 8 / Android 16**: Media volume max is 25 (not 15). The script auto-detects `max_volume` at runtime so it works correctly on any device.
 - **Always-on display**: The 5-minute revert is purely time-based and does not depend on screen state, so it works correctly on Pixel 8 with always-on display enabled.
