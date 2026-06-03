@@ -172,6 +172,12 @@ log "Interval: ${CHECK_INTERVAL}s | Revert: ${RESET_MINUTES}m"
 log "========================================"
 
 while true; do
+HOUR=$(date +%H%M)
+  if [ "$HOUR" -lt "0730" ] || [ "$HOUR" -gt "1730" ]; then
+    sleep 60
+    continue
+  fi
+
 
   location=$(_get_location)
 
