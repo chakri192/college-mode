@@ -251,8 +251,7 @@ To reduce battery impact, increase `CHECK_INTERVAL` to 120 or 180 seconds.
 
 - **Active hours**: Script only runs between 7:30am and 5:30pm. Outside those hours it sleeps and makes no volume changes, saving battery. Edit `HOUR -lt "0730"` and `HOUR -gt "1730"` in the script to change the window.
 - **VPN**: GPS hardware is unaffected by VPN. Only the network location fallback could theoretically be affected, but in practice Android's location service is local and bypasses the VPN tunnel.
-- **Pixel 8 / Android 16**: Media volume max is 25 (not 15). The script auto-detects `max_volume` at runtime so it works correctly on any device.
-- **Always-on display**: The 5-minute revert is purely time-based and does not depend on screen state, so it works correctly on Pixel 8 with always-on display enabled.
+- **Always-on display**: The 5-minute revert is purely time-based and does not depend on screen state, so it works with always-on display enabled.
 
 ---
 
