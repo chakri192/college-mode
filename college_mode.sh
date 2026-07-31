@@ -8,6 +8,7 @@
 COLLEGE_LAT="${COLLEGE_LAT:-0.000000}"
 COLLEGE_LON="${COLLEGE_LON:-0.000000}"
 RADIUS_METERS="${RADIUS_METERS:-150}"
+EXIT_RADIUS_METERS="${EXIT_RADIUS_METERS:-250}"   # hysteresis: leave only past this, so GPS jitter can't flap in/out
 CHECK_INTERVAL="${CHECK_INTERVAL:-60}"
 RESET_MINUTES="${RESET_MINUTES:-5}"
 COLLEGE_MEDIA_PCT="${COLLEGE_MEDIA_PCT:-20}"
@@ -187,10 +188,9 @@ HOUR=$(date +%H%M)
     continue
   fi
 
-  CURR_LAT=$(echo "$location" | python3 -c \
-    "import sys,json; d=json.load(sys.stdin); print(d.get('latitude',''))" 2>/dev/null)
-  CURR_LON=$(echo "$location" | python3 -c \
-    "import sys,json; d=json.load(sys.stdin); print(d.get('longitude',''))" 2>/dev/null)
+  # One python invocation for both coordinates (was two) — lighter per poll.
+  read -r CURR_LAT CURR_LON <<< "$(echo "$location" | python3 -c \
+    "import sys,json; d=json.load(sys.stdin); print(d.get('latitude',''), d.get('longitude',''))" 2>/dev/null)"
 
   if [ -z "$CURR_LAT" ] || [ -z "$CURR_LON" ]; then
     log "WARN: Empty coordinates"
@@ -202,14 +202,25 @@ HOUR=$(date +%H%M)
 
   log "Coords: ${CURR_LAT}, ${CURR_LON} | Dist: ${DIST}m | In college: ${IN_COLLEGE}"
 
-  if [ "$DIST" -le "$RADIUS_METERS" ]; then
+  # Hysteresis: enter when within RADIUS_METERS, but only leave once past the
+  # larger EXIT_RADIUS_METERS — so GPS jitter near the boundary can't flap.
+  if [ "$IN_COLLEGE" -eq 0 ]; then
 
-    if [ "$IN_COLLEGE" -eq 0 ]; then
+    if [ "$DIST" -le "$RADIUS_METERS" ]; then
       log ">>> Entered college (${DIST}m)"
       IN_COLLEGE=1
       apply_college_mode
       LAST_VOLUME_CHANGE=0
+    fi
 
+  else
+
+    if [ "$DIST" -gt "$EXIT_RADIUS_METERS" ]; then
+      log "<<< Left college (${DIST}m)"
+      IN_COLLEGE=0
+      LAST_VOLUME_CHANGE=0
+      COLLEGE_MEDIA_LEVEL=""
+      apply_normal_mode
     else
       CURR_VOL=$(get_stream_volume music)
       log "Volume check: current=${CURR_VOL} target=${COLLEGE_MEDIA_LEVEL}"
@@ -234,14 +245,6 @@ HOUR=$(date +%H%M)
       fi
     fi
 
-  else
-    if [ "$IN_COLLEGE" -eq 1 ]; then
-      log "<<< Left college (${DIST}m)"
-      IN_COLLEGE=0
-      LAST_VOLUME_CHANGE=0
-      COLLEGE_MEDIA_LEVEL=""
-      apply_normal_mode
-    fi
   fi
 
   sleep "$CHECK_INTERVAL"
