@@ -116,3 +116,10 @@ tail -f ~/college.log
 | Never enters | Coordinates still `0.000000`, or lat/lon swapped |
 | Toggles repeatedly | `EXIT_RADIUS_METERS` at or below `RADIUS_METERS` |
 | Nothing happens at all | Outside the 07:30–17:30 window |
+
+## Contributors
+
+| | |
+|---|---|
+| [chakri192](https://github.com/chakri192) | Author |
+| [aider](https://github.com/Aider-AI/aider) | AI pair programmer |
