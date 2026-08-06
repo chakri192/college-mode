@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="docs/quiet.svg" width="840" alt="" />
-
 # college-mode
 
 **Location-aware volume management for Android, in pure bash.**
