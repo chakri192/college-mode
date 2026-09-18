@@ -8,7 +8,7 @@ Switches the phone to vibrate on arrival at a defined location and restores full
 
 <p>
   <img alt="Platform" src="https://img.shields.io/badge/Android-Termux-1c1c1e?style=flat-square&logo=android&logoColor=3DDC84" />
-  <img alt="Shell" src="https://img.shields.io/badge/bash-251%20lines-1c1c1e?style=flat-square&logo=gnubash&logoColor=4EAA25" />
+  <img alt="Shell" src="https://img.shields.io/badge/pure-bash-1c1c1e?style=flat-square&logo=gnubash&logoColor=4EAA25" />
   <img alt="Root" src="https://img.shields.io/badge/root-not%20required-1c1c1e?style=flat-square" />
   <img alt="Tested" src="https://img.shields.io/badge/tested-Pixel%208%20·%20Android%2016-1c1c1e?style=flat-square" />
 </p>
@@ -21,16 +21,18 @@ Switches the phone to vibrate on arrival at a defined location and restores full
 
 Within 150 m of the configured location, the phone drops to vibrate with media volume at 20%. Beyond 250 m, full volume is restored. Between those two distances nothing happens, which is what prevents the script oscillating.
 
-It also defers to the user in two situations: outside configured hours it does not activate the GPS at all, and while headphones are connected it does not alter volume in either direction.
+It also defers to the user in two situations: outside configured hours it does not activate the GPS at all, and while headphones are connected it does not alter volume in either direction. A change deferred by headphones is not lost: it is applied as soon as they are removed.
 
 | Condition | Behaviour |
 |---|---|
 | Entering the 150 m radius | Vibrate, media 20%, notifications 0, confirmation toast |
 | Beyond the 250 m radius | Ringer restored, media 100%, notifications maximum |
 | Movement near the boundary | No change — entry and exit thresholds differ |
-| Headphones connected, wired or Bluetooth | No change in either direction |
+| Headphones connected, wired or Bluetooth | No change while connected; the pending profile is applied once removed |
 | Volume raised manually on site | Left for five minutes, then restored |
-| Outside 07:30–17:30 | Dormant; location is not polled |
+| Outside 07:30–17:30 | Dormant; location is not polled. If still on site when the window closes, full volume is restored |
+| Daemon stopped (`kill`, Ctrl-C) while on site | Full volume is restored before exit |
+| Second instance started | Refuses to run while the first is alive |
 | Device reboot | Restarted by Termux:Boot |
 
 ## Why two radii
@@ -82,8 +84,10 @@ The defaults are `0.000000`, so the script takes no action until these are set.
 ### 4. Startup
 
 ```sh
-nohup bash college_mode.sh > ~/college.log 2>&1 &
+nohup bash college_mode.sh > /dev/null 2>&1 &
 ```
+
+The script writes `~/college.log` itself, so stdout is discarded. Redirecting it to the same file would duplicate every line.
 
 For persistence across reboots, place the same exports plus `termux-wake-lock` in `~/.termux/boot/college-mode.sh`.
 
@@ -99,6 +103,14 @@ TEST_MODE=1 TEST_LAT=12.345678 TEST_LON=77.654321 \
 
 Adding `TEST_HEADPHONES=1` verifies the headphone bypass. Volume changes are logged as `[SIM] set music → 5`; no device state is modified.
 
+### Automated scenarios
+
+```sh
+bash tests/run.sh
+```
+
+The suite drives the daemon through scripted scenarios, one line per poll, and asserts on the log. It covers entry and exit, jitter inside the hysteresis band, headphones on arrival and departure, the active window closing on site, the manual-override timer, malformed location data, configuration validation, duplicate instances, and log rotation. It needs no device.
+
 ## Configuration
 
 All values are environment variables.
@@ -113,11 +125,14 @@ All values are environment variables.
 | `COLLEGE_MEDIA_PCT` | `20` | On-site media volume, as a percentage of maximum |
 | `COLLEGE_RINGER` | `0` | On-site ringer level; `0` is vibrate |
 | `NORMAL_RINGER_PCT` | `100` | Ringer percentage after departure |
+| `ACTIVE_START` · `ACTIVE_END` | `0730` · `1730` | Daily active window, `HHMM` |
 | `LOG_FILE` | `~/college.log` | Log destination |
+| `LOG_MAX_BYTES` · `LOG_KEEP_LINES` | `1048576` · `1000` | Log is trimmed to the last `LOG_KEEP_LINES` lines beyond this size |
+| `PID_FILE` | `~/.college-mode.pid` | Lock file preventing duplicate instances |
 
 Test-mode variables: `TEST_MODE`, `TEST_LAT`, `TEST_LON`, `TEST_MUSIC_VOL`, `TEST_MAX_VOL`, `TEST_HEADPHONES`, `TEST_BLUETOOTH`.
 
-The active window of 07:30–17:30 is currently defined in the main loop rather than exposed as a variable. Adjust the comparisons near `HOUR=$(date +%H%M)` to change it.
+Invalid values (for example an exit radius not larger than the entry radius, or coordinates still at `0,0`) are rejected at startup with a message in the log and on stderr.
 
 ## Operation
 
@@ -140,13 +155,15 @@ tail -f ~/college.log
 | Only `WARN: Could not get location` | Location permission set to "while in use" |
 | Terminates after several hours | Battery optimisation enabled for Termux |
 | Never registers entry | Coordinates unset, or latitude and longitude transposed |
-| Repeated toggling | `EXIT_RADIUS_METERS` set at or below `RADIUS_METERS` |
-| Volume changes ignored entirely | Headphones or a Bluetooth audio device connected — this is intentional |
-| No activity at any point | Current time outside the 07:30–17:30 window |
+| Repeated toggling | Not possible with a valid config: an exit radius at or below the entry radius is rejected at startup |
+| Volume changes deferred | Headphones or a Bluetooth audio device connected — intentional; applied once removed |
+| No activity at any point | Current time outside `ACTIVE_START`–`ACTIVE_END` |
+| `already running` on start | Another instance holds `PID_FILE`; stop it or delete a stale file |
+| Exits immediately | Check the last log line: invalid configuration is reported there |
 
 ## Resource usage
 
-Location is polled once per minute during the active window and not at all outside it, using the network provider in preference to GPS. This is the difference between a script that remains installed and one that is removed after a day.
+Location is polled once per minute during the active window and not at all outside it, using the network provider in preference to GPS. Each poll costs about three short Python invocations (location and distance, volume state, and the Bluetooth check). This is the difference between a script that remains installed and one that is removed after a day.
 
 ## Contributors
 
