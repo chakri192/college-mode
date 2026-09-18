@@ -89,7 +89,23 @@ nohup bash college_mode.sh > /dev/null 2>&1 &
 
 The script writes `~/college.log` itself, so stdout is discarded. Redirecting it to the same file would duplicate every line.
 
-For persistence across reboots, place the same exports plus `termux-wake-lock` in `~/.termux/boot/college-mode.sh`.
+### 5. Start on boot
+
+Put the configuration in `~/.college-mode.env`:
+
+```sh
+export COLLEGE_LAT="12.345678"
+export COLLEGE_LON="77.654321"
+```
+
+Then install the boot script. It takes a wake lock, loads that file, and starts the daemon:
+
+```sh
+mkdir -p ~/.termux/boot
+cp boot/college-mode.sh ~/.termux/boot/ && chmod +x ~/.termux/boot/college-mode.sh
+```
+
+Termux:Boot must have been opened once (see Permissions). The lock file prevents a second copy if the daemon is already running.
 
 ## Testing without travelling
 
