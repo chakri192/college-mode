@@ -129,6 +129,7 @@ All values are environment variables.
 | `LOG_FILE` | `~/college.log` | Log destination |
 | `LOG_MAX_BYTES` · `LOG_KEEP_LINES` | `1048576` · `1000` | Log is trimmed to the last `LOG_KEEP_LINES` lines beyond this size |
 | `PID_FILE` | `~/.college-mode.pid` | Lock file preventing duplicate instances |
+| `TERMUX_TIMEOUT` | `30` | Seconds before a hung `termux-*` call is abandoned and logged as a warning |
 
 Test-mode variables: `TEST_MODE`, `TEST_LAT`, `TEST_LON`, `TEST_MUSIC_VOL`, `TEST_MAX_VOL`, `TEST_HEADPHONES`, `TEST_BLUETOOTH`.
 
@@ -152,7 +153,7 @@ tail -f ~/college.log
 
 | Symptom | Cause |
 |---|---|
-| Only `WARN: Could not get location` | Location permission set to "while in use" |
+| Only `WARN: Could not get location` | Location permission set to "while in use". Grant **Allow all the time** to both **Termux** and **Termux:API**; the API app is the one that requests location |
 | Terminates after several hours | Battery optimisation enabled for Termux |
 | Never registers entry | Coordinates unset, or latitude and longitude transposed |
 | Repeated toggling | Not possible with a valid config: an exit radius at or below the entry radius is rejected at startup |

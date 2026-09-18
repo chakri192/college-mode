@@ -20,6 +20,7 @@ ACTIVE_START="${ACTIVE_START:-0730}"              # HHMM; outside this window th
 ACTIVE_END="${ACTIVE_END:-1730}"
 MAX_ITERATIONS="${MAX_ITERATIONS:-}"              # unset = run forever (used by tests)
 PID_FILE="${PID_FILE:-${HOME}/.college-mode.pid}"
+TERMUX_TIMEOUT="${TERMUX_TIMEOUT:-30}"            # seconds; a hung termux-* call must not freeze the daemon
 
 # ── TEST MODE ────────────────────────────────────────────────
 TEST_MODE="${TEST_MODE:-0}"
@@ -65,6 +66,10 @@ rotate_log() {
 }
 
 # ── TERMUX ABSTRACTION LAYER ──────────────────────────────────
+# Every termux-* call goes through tmx so a hang (e.g. background location
+# denied) turns into a logged warning instead of a stalled daemon.
+tmx() { timeout "$TERMUX_TIMEOUT" "$@"; }
+
 _get_location() {
   if [ "$TEST_MODE" = "1" ]; then
     if [ "$TEST_LOC" = "bad" ]; then
@@ -75,8 +80,8 @@ _get_location() {
     return
   fi
   local result
-  result=$(termux-location -p network -r once 2>/dev/null)
-  [ -z "$result" ] && result=$(termux-location -p gps -r once 2>/dev/null)
+  result=$(tmx termux-location -p network -r once 2>/dev/null </dev/null)
+  [ -z "$result" ] && result=$(tmx termux-location -p gps -r once 2>/dev/null </dev/null)
   echo "$result"
 }
 
@@ -85,7 +90,7 @@ _get_volume_info() {
     echo "[{\"stream\":\"music\",\"volume\":$TEST_MUSIC_VOL,\"max_volume\":$TEST_MAX_VOL},{\"stream\":\"ring\",\"volume\":7,\"max_volume\":7},{\"stream\":\"notification\",\"volume\":5,\"max_volume\":7}]"
     return
   fi
-  termux-volume 2>/dev/null
+  tmx termux-volume 2>/dev/null </dev/null
 }
 
 _set_volume() {
@@ -95,7 +100,7 @@ _set_volume() {
     [ "$stream" = "music" ] && TEST_MUSIC_VOL=$level
     return
   fi
-  termux-volume "$stream" "$level" 2>/dev/null
+  tmx termux-volume "$stream" "$level" 2>/dev/null </dev/null
 }
 
 # termux-audio-info reports both wired and Bluetooth (A2DP) output in one call.
@@ -104,13 +109,13 @@ _is_headphones_connected() {
     [ "$TEST_HEADPHONES" = "1" ] || [ "$TEST_BLUETOOTH" = "1" ]
     return
   fi
-  termux-audio-info 2>/dev/null \
+  tmx termux-audio-info 2>/dev/null </dev/null \
     | grep -Eq '"(WIREDHEADSET_IS_CONNECTED|BLUETOOTH_A2DP_IS_ON)"[[:space:]]*:[[:space:]]*true'
 }
 
 _toast() {
   [ "$TEST_MODE" = "1" ] && { log "[TOAST] $*"; return; }
-  termux-toast "$*" 2>/dev/null
+  tmx termux-toast "$*" 2>/dev/null </dev/null
 }
 
 # ── CLOCK (overridable in test mode) ──────────────────────────
@@ -291,6 +296,7 @@ validate_config() {
     [[ ${!v} =~ ^[0-9]+$ ]] || die "$v must be a non-negative integer (got '${!v}')"
   done
   [[ $CHECK_INTERVAL =~ ^[0-9]+$ ]] || die "CHECK_INTERVAL must be a non-negative integer"
+  [[ $TERMUX_TIMEOUT =~ ^[1-9][0-9]*$ ]] || die "TERMUX_TIMEOUT must be a positive integer"
   [ "$EXIT_RADIUS_METERS" -gt "$RADIUS_METERS" ] \
     || die "EXIT_RADIUS_METERS ($EXIT_RADIUS_METERS) must exceed RADIUS_METERS ($RADIUS_METERS)"
   [[ $ACTIVE_START =~ $hhmm && $ACTIVE_END =~ $hhmm ]] \
@@ -299,7 +305,7 @@ validate_config() {
     || die "ACTIVE_START must be earlier than ACTIVE_END"
 
   local cmd
-  for cmd in python3 $([ "$TEST_MODE" = "1" ] || echo termux-location termux-volume termux-audio-info termux-toast); do
+  for cmd in python3 $([ "$TEST_MODE" = "1" ] || echo timeout termux-location termux-volume termux-audio-info termux-toast); do
     command -v "$cmd" > /dev/null 2>&1 || die "required command not found: $cmd"
   done
 }

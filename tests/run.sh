@@ -143,11 +143,24 @@ check "warns"                     has "WARN: Unusable location fix"
 check "recovers and enters"       has ">>> Entered college"
 check "no shell errors in log"    eq "$(count 'integer expression')" 0
 
+echo "hung termux-location times out instead of freezing"
+STUBS="$WORK/stubs"; mkdir -p "$STUBS"
+printf '#!/bin/sh\nsleep 30\n' > "$STUBS/termux-location"
+for c in termux-volume termux-audio-info termux-toast; do printf '#!/bin/sh\nexit 0\n' > "$STUBS/$c"; done
+chmod +x "$STUBS"/*
+START=$SECONDS
+run hung 1 TEST_MODE=0 PATH="$STUBS:$PATH" TERMUX_TIMEOUT=1 ACTIVE_START=0000 ACTIVE_END=2359 <<< "$IN"
+check "logs a warning"            has "WARN: Could not get location"
+check "returns within 10s"        test $((SECONDS - START)) -lt 10
+check "exits cleanly"             eq "$RC" 0
+
 echo "startup validation"
 run coords0 1 COLLEGE_LAT=0.000000 COLLEGE_LON=0.000000 <<< "$IN"
 check "rejects 0,0"               eq "$RC" 1
 run radii 1 RADIUS_METERS=300 EXIT_RADIUS_METERS=200 <<< "$IN"
 check "rejects exit <= enter"     eq "$RC" 1
+run badto 1 TERMUX_TIMEOUT=0 <<< "$IN"
+check "rejects zero timeout"      eq "$RC" 1
 run badwin 1 ACTIVE_START=2500 <<< "$IN"
 check "rejects bad HHMM"          eq "$RC" 1
 run inject 1 COLLEGE_LAT="0;touch $WORK/pwned" <<< "$IN"
