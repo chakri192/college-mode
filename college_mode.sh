@@ -98,24 +98,14 @@ _set_volume() {
   termux-volume "$stream" "$level" 2>/dev/null
 }
 
-_is_wired_headphones() {
-  [ "$TEST_MODE" = "1" ] && { [ "$TEST_HEADPHONES" = "1" ] && return 0 || return 1; }
+# termux-audio-info reports both wired and Bluetooth (A2DP) output in one call.
+_is_headphones_connected() {
+  if [ "$TEST_MODE" = "1" ]; then
+    [ "$TEST_HEADPHONES" = "1" ] || [ "$TEST_BLUETOOTH" = "1" ]
+    return
+  fi
   termux-audio-info 2>/dev/null \
-    | grep -Eq '"WIREDHEADSET_IS_CONNECTED"[[:space:]]*:[[:space:]]*true'
-}
-
-_is_bluetooth_connected() {
-  [ "$TEST_MODE" = "1" ] && { [ "$TEST_BLUETOOTH" = "1" ] && return 0 || return 1; }
-  local state
-  state=$(termux-bluetooth-info 2>/dev/null | python3 -c '
-import sys, json
-try:
-    d = json.load(sys.stdin)
-    print(any(x.get("connected") for x in d.get("paired_devices", [])))
-except Exception:
-    print(False)
-' 2>/dev/null)
-  [ "$state" = "True" ]
+    | grep -Eq '"(WIREDHEADSET_IS_CONNECTED|BLUETOOTH_A2DP_IS_ON)"[[:space:]]*:[[:space:]]*true'
 }
 
 _toast() {
@@ -202,12 +192,12 @@ pct_to_level() {
   echo "$level"
 }
 
-# Cached per poll (reset at the top of the loop) so the audio and
-# bluetooth probes run at most once per iteration.
+# Cached per poll (reset at the top of the loop) so the audio probe
+# runs at most once per iteration.
 HP_CACHE=""
 headphones_connected() {
   if [ -z "$HP_CACHE" ]; then
-    if _is_wired_headphones || _is_bluetooth_connected; then HP_CACHE=1; else HP_CACHE=0; fi
+    if _is_headphones_connected; then HP_CACHE=1; else HP_CACHE=0; fi
   fi
   [ "$HP_CACHE" = "1" ]
 }
@@ -309,7 +299,7 @@ validate_config() {
     || die "ACTIVE_START must be earlier than ACTIVE_END"
 
   local cmd
-  for cmd in python3 $([ "$TEST_MODE" = "1" ] || echo termux-location termux-volume termux-audio-info termux-bluetooth-info termux-toast); do
+  for cmd in python3 $([ "$TEST_MODE" = "1" ] || echo termux-location termux-volume termux-audio-info termux-toast); do
     command -v "$cmd" > /dev/null 2>&1 || die "required command not found: $cmd"
   done
 }

@@ -163,7 +163,7 @@ tail -f ~/college.log
 
 ## Resource usage
 
-Location is polled once per minute during the active window and not at all outside it, using the network provider in preference to GPS. Each poll costs about three short Python invocations (location and distance, volume state, and the Bluetooth check). This is the difference between a script that remains installed and one that is removed after a day.
+Location is polled once per minute during the active window and not at all outside it, using the network provider in preference to GPS. Each poll costs two short Python invocations (location and distance, volume state). This is the difference between a script that remains installed and one that is removed after a day.
 
 ## Contributors
 
