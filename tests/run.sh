@@ -25,7 +25,7 @@ run() {
   cat > "$WORK/$name.seq"
   env TEST_MODE=1 COLLEGE_LAT=12.345678 COLLEGE_LON=77.654321 \
       CHECK_INTERVAL=0 MAX_ITERATIONS="$iters" LOG_FILE="$LOG" \
-      PID_FILE="$WORK/$name.pid" TEST_SEQUENCE="$WORK/$name.seq" "$@" \
+      PID_FILE="$WORK/$name.pid" STATE_FILE="$WORK/$name.state" TEST_SEQUENCE="$WORK/$name.seq" "$@" \
       bash "$SCRIPT" > /dev/null 2>&1
   RC=$?
 }
@@ -184,10 +184,68 @@ time=0900 $IN
 SEQ
 check "restores on exit"          has "Shutting down — restoring normal volume"
 
+echo "daemon killed on site, restarted after leaving (bug: stuck on college volume)"
+echo 1 > "$WORK/resume_out.state"
+run resume_out 2 STATE_FILE="$WORK/resume_out.state" <<SEQ
+time=0900 $OUT
+time=0900 $OUT
+SEQ
+check "resumes the visit"         has "Resuming: previous run ended while on site"
+check "restores on leaving"       has "<<< Left college"
+check "normal volume applied"     has "Applied normal mode"
+check "state cleared"             eq "$(cat "$WORK/resume_out.state")" 0
+
+echo "daemon killed on site, restarted still on site"
+echo 1 > "$WORK/resume_in.state"
+run resume_in 2 STATE_FILE="$WORK/resume_in.state" <<SEQ
+time=0900 $IN
+time=0900 $IN
+SEQ
+check "does not re-enter"         eq "$(count '>>> Entered')" 0
+check "does not reset volume"     eq "$(count 'Applied college mode')" 0
+
+echo "state file tracks visits"
+run state_on 2 <<SEQ
+time=0900 $IN
+time=0900 $IN
+SEQ
+check "cleared by clean shutdown" eq "$(cat "$WORK/state_on.state")" 0
+
 echo "log rotation"
 seq 1 500 | sed 's/^/filler line /' > "$WORK/rot.log"
 run rot 1 LOG_FILE="$WORK/rot.log" LOG_MAX_BYTES=2000 LOG_KEEP_LINES=20 <<< "time=0600 $OUT"
 check "log truncated"             test "$(wc -l < "$WORK/rot.log")" -lt 100
+
+echo "watchdog"
+BOOT="$ROOT/boot/college-mode.sh"
+FAKE="$WORK/fake_daemon.sh"
+cat > "$FAKE" <<'FAKE'
+#!/usr/bin/env bash
+# dies with SIGKILL-style status twice, then exits as if stopped by SIGTERM
+n=$(cat "$COUNT_FILE" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNT_FILE"
+case "$n" in 1|2) exit 137 ;; *) exit "${FINAL_RC:-143}" ;; esac
+FAKE
+wd() {  # wd <name> <final_rc> -> runs the supervisor; COUNT in $WORK/<name>.count
+  LOG="$WORK/$1.log"; : > "$LOG"; rm -f "$WORK/$1.count"
+  env HOME="$WORK" COLLEGE_MODE_SCRIPT="$FAKE" COUNT_FILE="$WORK/$1.count" FINAL_RC="$2" \
+      LOG_FILE="$LOG" RESTART_DELAY=0 SUPERVISOR_PID_FILE="$WORK/$1.sup" \
+      timeout 20 bash "$BOOT" > /dev/null 2>&1
+  RC=$?
+}
+wd killed 143
+check "restarts after each kill"  eq "$(cat "$WORK/killed.count")" 3
+check "logs both deaths"          eq "$(count 'daemon died (exit 137)')" 2
+check "stops on deliberate TERM"  has "not restarting"
+check "supervisor lock removed"   test ! -e "$WORK/killed.sup"
+wd clean 0
+check "no restart after clean exit" eq "$(cat "$WORK/clean.count")" 3
+echo 12345 > "$WORK/dupsup.sup"; sleep 30 & SLP=$!; echo $SLP > "$WORK/dupsup.sup"
+LOG="$WORK/dupsup.log"; : > "$LOG"
+env HOME="$WORK" COLLEGE_MODE_SCRIPT="$FAKE" COUNT_FILE="$WORK/dupsup.count" LOG_FILE="$LOG" \
+    SUPERVISOR_PID_FILE="$WORK/dupsup.sup" timeout 10 bash "$BOOT" > /dev/null 2>&1
+kill $SLP 2> /dev/null; wait $SLP 2> /dev/null
+check "second supervisor declines" has "already supervising"
+check "and starts no daemon"       test ! -e "$WORK/dupsup.count"
 
 echo
 echo "$PASS passed, $FAIL failed"

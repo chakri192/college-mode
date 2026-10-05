@@ -20,6 +20,7 @@ ACTIVE_START="${ACTIVE_START:-0730}"              # HHMM; outside this window th
 ACTIVE_END="${ACTIVE_END:-1730}"
 MAX_ITERATIONS="${MAX_ITERATIONS:-}"              # unset = run forever (used by tests)
 PID_FILE="${PID_FILE:-${HOME}/.college-mode.pid}"
+STATE_FILE="${STATE_FILE:-${HOME}/.college-mode.state}"   # survives a kill, so a restart knows it was on site
 TERMUX_TIMEOUT="${TERMUX_TIMEOUT:-30}"            # seconds; a hung termux-* call must not freeze the daemon
 
 # ── TEST MODE ────────────────────────────────────────────────
@@ -266,8 +267,23 @@ flush_pending() {
   esac
 }
 
+# Persist whether we are on site. A SIGKILL (Android can do this to background
+# processes) runs no trap, so without this a restart would forget the visit and
+# leave the phone stuck on the college profile after you leave.
+save_state() { echo "$IN_COLLEGE" > "$STATE_FILE" 2>/dev/null; }
+
+restore_state() {
+  [ "$(cat "$STATE_FILE" 2>/dev/null)" = "1" ] || return 0
+  IN_COLLEGE=1
+  if read_volumes; then
+    COLLEGE_MEDIA_LEVEL=$(pct_to_level "$COLLEGE_MEDIA_PCT" "$MUSIC_MAX")
+  fi
+  log "Resuming: previous run ended while on site"
+}
+
 begin_visit() {
   IN_COLLEGE=1
+  save_state
   LAST_VOLUME_CHANGE=0
   PENDING=college
   apply_college_mode
@@ -275,6 +291,7 @@ begin_visit() {
 
 end_visit() {
   IN_COLLEGE=0
+  save_state
   LAST_VOLUME_CHANGE=0
   COLLEGE_MEDIA_LEVEL=""
   PENDING=normal
@@ -334,6 +351,8 @@ on_exit() {
     log "Shutting down — restoring normal volume"
     apply_normal_mode
   fi
+  IN_COLLEGE=0
+  save_state
   rm -f "$PID_FILE"
 }
 
@@ -374,6 +393,7 @@ log "Target: ${COLLEGE_LAT}, ${COLLEGE_LON} (enter ${RADIUS_METERS}m, exit ${EXI
 log "Window: ${ACTIVE_START}-${ACTIVE_END} | Interval: ${CHECK_INTERVAL}s | Revert: ${RESET_MINUTES}m"
 [ "$TEST_MODE" = "1" ] && log "*** TEST MODE ACTIVE ***"
 log "========================================"
+restore_state
 
 while true; do
   POLL_COUNT=$((POLL_COUNT + 1))
