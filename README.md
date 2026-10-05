@@ -10,6 +10,7 @@ Puts your Android phone on vibrate when you get to college and turns the volume 
 - With headphones connected, it waits and applies the change once you unplug them.
 - If you turn the volume up while on campus, it's set back after 5 minutes.
 - If the script is stopped while you're on campus, it restores full volume first.
+- If Android kills it, the boot script starts it again within 30 seconds and it picks up where it left off.
 
 ## Requirements
 
@@ -56,6 +57,16 @@ cp ~/college-mode/boot/college-mode.sh ~/.termux/boot/
 chmod +x ~/.termux/boot/college-mode.sh
 ```
 
+That script is also a watchdog. Android can kill background processes without warning, and a process killed that way can't clean up after itself. The watchdog runs the script as a child and starts it again if it dies. The script keeps a note of whether you're on campus in `~/.college-mode.state`, so a restarted copy knows to restore full volume when you leave.
+
+It does not restart the script if you stopped it on purpose or if a setting is invalid. To stop everything, including the watchdog:
+
+```sh
+pkill -f college-mode.sh
+```
+
+`pkill -f college_mode.sh` (underscore) stops only the script, and the watchdog starts it again.
+
 ## Settings
 
 Add any of these to `~/.college-mode.env`.
@@ -72,6 +83,8 @@ Add any of these to `~/.college-mode.env`.
 | `NORMAL_RINGER_PCT` | `100` | Ringer volume after leaving, in percent |
 | `RESET_MINUTES` | `5` | How long a manual volume change is kept |
 | `LOG_FILE` | `~/college.log` | Log file |
+| `RESTART_DELAY` | `30` | Seconds the watchdog waits before restarting a killed script |
+| `TERMUX_TIMEOUT` | `30` | Seconds before a hung Termux call is given up on |
 
 If a setting is invalid, the script stops and says why in the log.
 
@@ -95,7 +108,7 @@ TEST_MODE=1 TEST_LAT=12.345678 TEST_LON=77.654321 \
   CHECK_INTERVAL=2 ACTIVE_START=0000 ACTIVE_END=2359 bash college_mode.sh
 ```
 
-There's also an automated test suite that runs on any machine with bash (40 checks):
+There's also an automated test suite that runs on any machine with bash (54 checks, including the watchdog):
 
 ```sh
 bash tests/run.sh
@@ -106,10 +119,11 @@ bash tests/run.sh
 | Problem | Fix |
 |---|---|
 | Log only shows `Could not get location` | Set location to "Allow all the time" for Termux:API and Termux |
-| Stops after a few hours | Turn off battery optimisation for Termux |
+| Stops after a few hours | Turn off battery optimisation for Termux. On Android 12 and later, also turn on **Developer options → Disable child process restrictions**, which stops Android killing background processes. Without it the watchdog restarts the script, but the kills still happen |
+| `watchdog: daemon died (exit 137)` in the log | Android killed the script and the watchdog restarted it. See the row above |
 | Never switches to vibrate | Check the coordinates, and that it's within active hours |
 | Volume doesn't change | Headphones are connected; it will change when you unplug them |
-| `already running` | Another copy is running. Stop it, or delete `~/.college-mode.pid` |
+| `already running` | Another copy is running. Stop it, or delete `~/.college-mode.pid`. For the watchdog, the file is `~/.college-mode-supervisor.pid` |
 | Doesn't start after reboot | Open Termux:Boot once. If you cloned somewhere other than `~/college-mode`, add `export COLLEGE_MODE_SCRIPT=/path/to/college_mode.sh` to `~/.college-mode.env` |
 
 ## Contributors
